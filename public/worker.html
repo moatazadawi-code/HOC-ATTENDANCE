@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="حضور هوك">
+  <meta name="theme-color" content="#0f172a">
+  <title>شركة هوك - تسجيل الحضور الذكي</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+    * { font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .pulse-ring {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+      animation: pulse-green 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+    }
+    @keyframes pulse-green {
+      to { box-shadow: 0 0 0 24px rgba(34, 197, 94, 0); }
+    }
+    .pulse-red {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      animation: pulse-red-anim 1.5s infinite cubic-bezier(0.66, 0, 0, 1);
+    }
+    @keyframes pulse-red-anim {
+      to { box-shadow: 0 0 0 24px rgba(239, 68, 68, 0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col justify-between selection:bg-amber-500">
+
+  <!-- Header -->
+  <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/60 px-4 py-3 sticky top-0 z-50">
+    <div class="max-w-md mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-amber-500/20">
+          HOK
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base leading-tight text-white tracking-wide">شركة هوك للمقاولات</h1>
+          <p class="text-[11px] text-amber-400 font-semibold">بوابة حضور المواقع الإنشائية</p>
+        </div>
+      </div>
+
+      <button id="switchWorkerBtn" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-600 hidden">
+        تبديل العامل
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-md w-full mx-auto px-4 py-5 flex-1 flex flex-col justify-center">
+
+    <!-- STEP 1: Select Worker (Shown only on first open) -->
+    <div id="selectWorkerStep" class="space-y-4">
+      <div class="text-center space-y-1 mb-6">
+        <div class="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl mx-auto flex items-center justify-center text-amber-400 text-3xl mb-2">
+          👷
+        </div>
+        <h2 class="text-xl font-bold text-white">مرحباً بك يا بطل!</h2>
+        <p class="text-xs text-slate-400">اختر اسمك لتسجيل الحضور في موقع العمل</p>
+      </div>
+
+      <!-- Worker Selection Card (Manual Selection Mode) -->
+      <div id="manualSelectCard" class="bg-slate-800/70 border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
+        <label class="block text-xs font-semibold text-slate-300">اختر اسم العامل / الموظف:</label>
+        <select id="workerSelect" class="w-full bg-slate-900 border border-slate-600 rounded-xl p-3.5 text-base font-bold text-amber-400 focus:outline-none focus:border-amber-500">
+          <option value="">-- اضغط لاختيار اسمك --</option>
+        </select>
+
+        <div id="pinBox" class="hidden space-y-1 pt-2">
+          <label class="block text-xs font-semibold text-slate-300">كود الدخول (PIN):</label>
+          <input type="password" id="workerPin" pattern="[0-9]*" inputmode="numeric" placeholder="أدخل الكود (الافتراضي 1234)" class="w-full bg-slate-900 border border-slate-600 rounded-xl p-3 text-center text-xl tracking-widest font-bold text-white focus:outline-none focus:border-amber-500">
+        </div>
+
+        <button id="confirmWorkerBtn" class="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black py-3.5 rounded-xl shadow-lg shadow-amber-500/20 text-base transition-all mt-2">
+          متابعة وتأكيد الاسم 🚀
+        </button>
+      </div>
+
+      <!-- Personalized Worker Welcome Card (Only asks for password/PIN) -->
+      <div id="personalizedWorkerCard" class="hidden bg-slate-800/90 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div class="flex items-center gap-3 border-b border-slate-700/80 pb-3">
+          <div class="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-black text-2xl shadow-lg shadow-amber-500/30">
+            👷
+          </div>
+          <div class="flex-1">
+            <span class="text-[10px] text-amber-400 font-bold tracking-wide uppercase block">تم التعرف على حسابك تلقائياً</span>
+            <h3 id="personalizedWorkerName" class="text-lg font-black text-white">--</h3>
+            <p id="personalizedWorkerJob" class="text-xs text-slate-300">--</p>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-slate-200">
+            <span>🔑 برجاء إدخال كلمة المرور / كود الدخول (PIN):</span>
+          </label>
+          <input type="password" id="personalizedPinInput" pattern="[0-9]*" inputmode="numeric" placeholder="أدخل الكود (مثال: 1234)" class="w-full bg-slate-950 border-2 border-amber-500/40 rounded-xl p-3.5 text-center text-2xl tracking-[0.3em] font-black text-amber-400 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30">
+          <p class="text-[11px] text-slate-400 text-center">أدخل كود المرور الخاص بك للمتابعة وتأكيد الحضور بالموقع</p>
+        </div>
+
+        <button id="personalizedLoginBtn" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-slate-950 font-black py-3.5 rounded-xl shadow-lg shadow-amber-500/30 text-base transition-all flex items-center justify-center gap-2">
+          <span>تسجيل الدخول ومتابعة الحضور</span>
+          <span>🚀</span>
+        </button>
+
+        <div class="text-center pt-1">
+          <button type="button" id="switchFromPersonalizedBtn" class="text-[11px] text-slate-400 hover:text-slate-200 underline">
+            لست أنت؟ اضغط هنا لاختيار اسم آخر
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Attendance Action Screen -->
+    <div id="attendanceStep" class="hidden space-y-5">
+      
+      <!-- Worker Card Info -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 shadow-lg flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-black text-xl shadow">
+            👷
+          </div>
+          <div>
+            <h3 id="currentWorkerName" class="text-base font-black text-white">--</h3>
+            <p id="currentWorkerJob" class="text-xs text-amber-400 font-semibold">--</p>
+          </div>
+        </div>
+        <div class="text-left">
+          <span class="text-[10px] text-slate-400 block">المواقع المصرح بها</span>
+          <span id="currentSiteName" class="text-xs font-bold text-slate-200 block max-w-[140px] truncate text-left">--</span>
+        </div>
+      </div>
+
+      <!-- Dedicated Assigned Sites Card (المواقع المصرح بها للعامل لإثبات الحضور) -->
+      <div class="bg-slate-800/90 border border-amber-500/40 rounded-2xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-700/80 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🏢</span>
+            <div>
+              <h4 class="text-xs font-black text-amber-400">المواقع المسموح لك بإثبات الحضور بها:</h4>
+              <p class="text-[10px] text-slate-400">يمكنك تسجيل الحضور فور وصولك لأي موقع من المواقع التالية</p>
+            </div>
+          </div>
+          <span id="assignedSitesCountBadge" class="bg-amber-500/10 border border-amber-500/30 text-amber-300 font-black text-[11px] px-2.5 py-0.5 rounded-full whitespace-nowrap">
+            0 مواقع
+          </span>
+        </div>
+
+        <!-- Dynamic List of Authorized Sites -->
+        <div id="assignedSitesContainer" class="space-y-2 max-h-56 overflow-y-auto">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Add to Home Screen PWA Tip Banner -->
+      <div id="pwaHomeBanner" class="bg-indigo-950/60 border border-indigo-500/40 rounded-2xl p-3 flex items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📲</span>
+          <div class="text-right">
+            <span class="block font-bold text-white text-[11px]">احفظ التطبيق على شاشة هاتفك:</span>
+            <span class="block text-[10px] text-indigo-300">اضغط قائمة المتصفح (⋮) واختر <b>(إضافة للشاشة الرئيسية)</b> لفتحه يومياً بدون رابط.</span>
+          </div>
+        </div>
+        <button onclick="document.getElementById('pwaHomeBanner').classList.add('hidden')" class="text-slate-400 hover:text-white text-xs px-1.5 py-0.5">✕</button>
+      </div>
+
+      <!-- Insecure HTTP Warning Banner (Shown only if opened over insecure HTTP on mobile) -->
+      <div id="httpInsecureWarning" class="hidden bg-amber-950/90 border-2 border-amber-500 rounded-2xl p-4 text-center space-y-2 text-xs">
+        <div class="text-2xl">⚠️</div>
+        <h4 class="font-black text-amber-300 text-sm">متصفح الموبايل يحظر الـ GPS على الروابط غير المشفرة (HTTP)!</h4>
+        <p class="text-amber-200/90 leading-relaxed">
+          جميع هواتف أندرويد وآيفون تشترط رابطاً آمناً يبدأ بـ <b>https://</b> لتشغيل الموقع الجغرافي.
+        </p>
+        <p class="text-white bg-slate-900/80 p-2 rounded-xl font-mono text-[11px]">
+          يرجى فتح ملف <b>(تشغيل رابط الموبايل السحابي)</b> للحصول على رابط HTTPS مجاني يعمل فوراً.
+        </p>
+      </div>
+
+      <!-- GPS Status Radar Card -->
+      <div id="radarCard" class="bg-slate-800/60 border border-slate-700 rounded-2xl p-4 text-center space-y-3">
+        <div class="flex items-center justify-center gap-2">
+          <span id="gpsDot" class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span>
+          <span id="gpsStatusText" class="text-xs font-bold text-amber-400">جاري فحص إشارة الـ GPS والموقع...</span>
+        </div>
+        <p id="distanceText" class="text-sm font-extrabold text-white">المسافة للموقع: --</p>
+        <p id="accuracyText" class="text-[11px] text-slate-400">دقة الـ GPS: --</p>
+
+        <!-- Retry & Help Buttons -->
+        <div class="pt-1 flex items-center justify-center gap-2">
+          <button type="button" id="retryGpsBtn" onclick="restartGps()"
+            class="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+            <span>🔄</span>
+            <span>إعادة محاولة قراءة الموقع</span>
+          </button>
+          <button type="button" onclick="showGpsHelp()"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all">
+            <span>❓</span>
+            <span>مساعدة الـ GPS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- GPS Help Modal -->
+      <div id="gpsHelpModal" class="hidden fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-sm w-full space-y-4 text-right text-xs">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="font-black text-amber-400 text-sm">حل مشكلة تحديد الموقع (GPS)</h3>
+            <button onclick="hideGpsHelp()" class="text-slate-400 hover:text-white text-lg">✕</button>
+          </div>
+          <div class="space-y-3 text-slate-300 leading-relaxed">
+            <div class="flex items-start gap-2">
+              <span class="text-amber-400 font-black">1.</span>
+              <p><b>تأكد من فتح رابط HTTPS:</b> متصفحات الموبايل (Chrome / Safari) تمنع الـ GPS تماماً على روابط http العادية.</p>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="text-amber-400 font-black">2.</span>
+              <p><b>تفعيل إذن الموقع للمتصفح:</b> اضغط على علامة القفل 🔒 أو أيقونة الإعدادات بجانب عنوان الموقع في المتصفح ثم اختر <b>(السماح بالموقع - Allow Location)</b>.</p>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="text-amber-400 font-black">3.</span>
+              <p><b>تفعيل دقة الموقع العالية (Google Location Accuracy):</b> في إعدادات الهاتف تأكد من تفعيل "دقة الموقع المحسنة" ليستخدم شبكات المحمول والواي فاي بجانب الأقمار الصناعية.</p>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="text-amber-400 font-black">4.</span>
+              <p><b>إذا كنت داخل مبنى مغلق أو تحت صبة:</b> الأقمار الصناعية قد تستغرق وقتاً، اقترب من نافذة أو مكان مكشوف واضغط على <b>(إعادة محاولة قراءة الموقع)</b>.</p>
+            </div>
+          </div>
+          <button onclick="hideGpsHelp(); restartGps();" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs">
+            فهمت، جرب قراءة الموقع الآن ✅
+          </button>
+        </div>
+      </div>
+
+      <!-- Out of Zone Warning Banner (hidden by default) -->
+      <div id="breachWarning" class="hidden bg-red-950/80 border-2 border-red-500 rounded-2xl p-4 text-center pulse-red">
+        <div class="text-3xl mb-1">⚠️</div>
+        <h4 class="font-black text-red-300 text-sm">أنت خارج نطاق موقع العمل!</h4>
+        <p class="text-xs text-red-200 mt-1">يرجى العودة إلى حدود الموقع فوراً، الوقت خارج النطاق يتم خصمه تلقائياً.</p>
+      </div>
+
+      <!-- BIG ATTENDANCE ACTION BUTTON -->
+      <div class="py-2 flex flex-col items-center justify-center">
+
+        <!-- CHECK IN BUTTON (When not checked in) -->
+        <div id="checkInArea" class="w-full flex flex-col items-center space-y-3">
+          <button id="checkInBtn" disabled class="w-56 h-56 rounded-full bg-slate-700 text-slate-400 border-4 border-slate-600 flex flex-col items-center justify-center gap-2 text-center p-4 transition-all duration-300 select-none cursor-not-allowed">
+            <span class="text-5xl">📍</span>
+            <span class="text-xl font-black leading-tight">تسجيل<br>الحضور</span>
+            <span id="checkInSubtext" class="text-[11px] font-semibold text-slate-300">يجب التواجد بالموقع</span>
+          </button>
+          <p id="checkInHint" class="text-xs text-center text-slate-400 max-w-xs">
+            يجب أن تكون داخل الدائرة الجغرافية للموقع لتسجيل الحضور
+          </p>
+        </div>
+
+        <!-- CHECKED IN ACTIVE STATE (When checked in) -->
+        <div id="checkedInArea" class="hidden w-full flex flex-col items-center space-y-4">
+          
+          <!-- Timer Card -->
+          <div class="w-full bg-emerald-950/40 border border-emerald-500/50 rounded-2xl p-4 text-center space-y-1">
+            <span class="inline-block bg-emerald-500 text-slate-950 text-xs font-black px-3 py-0.5 rounded-full mb-1">
+              🟢 حضور نشط - جاري العمل
+            </span>
+            <p class="text-xs text-emerald-200">وقت العمل المسجل اليوم:</p>
+            <div id="workTimer" class="text-3xl font-black text-emerald-400 tracking-wider">00:00:00</div>
+          </div>
+
+          <!-- CHECK OUT BUTTON -->
+          <button id="checkOutBtn" class="w-full bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 active:scale-98 text-white font-black py-4 rounded-2xl shadow-xl shadow-red-600/30 text-lg transition-all flex items-center justify-center gap-2">
+            <span>🏁</span>
+            <span>تسجيل الانصراف (نهاية اليوم)</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Quick Tips Card -->
+      <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3 text-[11px] text-slate-400 flex items-start gap-2">
+        <span class="text-amber-400 text-base leading-none">💡</span>
+        <p>تأكد من تفعيل خدمة الموقع (GPS) بالهاتف، والسماح للمتصفح بالوصول للموقع بأعلى دقة.</p>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Technical Support Card -->
+  <div class="px-4 py-2">
+    <a href="https://wa.me/201555148577?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D9%8B%20%D8%A3%2F%20%D9%85%D8%B9%D8%AA%D8%B2%20%D8%A7%D9%84%D8%B9%D8%AF%D9%88%D9%8A%D8%8C%20%D8%A3%D9%86%D8%A7%20%D8%B9%D8%A7%D9%85%D9%84%20%D9%81%D9%8A%20%D8%B4%D8%B1%D9%83%D8%A9%20%D9%87%D9%88%D9%83%20%D9%88%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D9%85%D8%B3%D8%A7%D8%B9%D8%AF%D8%A9"
+       target="_blank"
+       class="bg-slate-900 border border-emerald-500/30 hover:border-emerald-500/60 rounded-xl p-2.5 flex items-center justify-between text-xs text-slate-300 active:scale-98 transition-all">
+      <div class="flex items-center gap-2">
+        <span class="text-base">🎧</span>
+        <div class="text-right">
+          <span class="block text-[10px] text-emerald-400 font-bold">الدعم الفني للنظام:</span>
+          <span class="block text-xs font-black text-white">أ/ معتز العدوي</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 font-mono text-[11px] px-2.5 py-1 rounded-lg">
+        <span>💬</span>
+        <span>01555148577</span>
+      </div>
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer class="p-3 text-center text-[10px] text-slate-500 border-t border-slate-800">
+    نظام شركة هوك للمقاولات © 2026 - نظام الحضور الذكي للمواقع
+  </footer>
+
+  <!-- Web Audio API Sound Generator (Success Chime & Alert Beep) -->
+  <script>
+    function playAudioTone(type) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (type === 'success') {
+          // Pleasant high chime
+          const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+          notes.forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.value = freq;
+            osc.type = 'triangle';
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime + idx * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.1 + 0.25);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(audioCtx.currentTime + idx * 0.1);
+            osc.stop(audioCtx.currentTime + idx * 0.1 + 0.25);
+          });
+        } else if (type === 'alert') {
+          // Urgent warning beep
+          [400, 300, 400, 300].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.value = freq;
+            osc.type = 'sawtooth';
+            gain.gain.setValueAtTime(0.4, audioCtx.currentTime + idx * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.15 + 0.12);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(audioCtx.currentTime + idx * 0.15);
+            osc.stop(audioCtx.currentTime + idx * 0.15 + 0.12);
+          });
+        }
+      } catch (e) {
+        console.warn('Audio Tone Error:', e);
+      }
+    }
+  </script>
+
+  <!-- Application Logic -->
+  <script>
+    const socket = io();
+
+    // State
+    let workersList = [];
+    let currentWorker = null;
+    let currentLat = null;
+    let currentLng = null;
+    let currentAccuracy = null;
+    let isInsideZone = false;
+    let currentDistance = null;
+    let activeAttendance = null;
+    let timerInterval = null;
+    let pingInterval = null;
+    let serverClockOffsetMs = 0;
+    let localSessionStartTime = null;
+    let localBaseAccumulatedSeconds = 0;
+    let isDayPermanentlyClosed = false;
+    const MAX_WORK_SECONDS = 10 * 3600; // 10 hours = 36000 seconds
+
+    // Elements
+    const selectWorkerStep = document.getElementById('selectWorkerStep');
+    const attendanceStep = document.getElementById('attendanceStep');
+    const manualSelectCard = document.getElementById('manualSelectCard');
+    const personalizedWorkerCard = document.getElementById('personalizedWorkerCard');
+    const personalizedWorkerName = document.getElementById('personalizedWorkerName');
+    const personalizedWorkerJob = document.getElementById('personalizedWorkerJob');
+    const personalizedPinInput = document.getElementById('personalizedPinInput');
+    const personalizedLoginBtn = document.getElementById('personalizedLoginBtn');
+    const switchFromPersonalizedBtn = document.getElementById('switchFromPersonalizedBtn');
+
+    const workerSelect = document.getElementById('workerSelect');
+    const pinBox = document.getElementById('pinBox');
+    const workerPin = document.getElementById('workerPin');
+    const confirmWorkerBtn = document.getElementById('confirmWorkerBtn');
+    const switchWorkerBtn = document.getElementById('switchWorkerBtn');
+
+    const currentWorkerName = document.getElementById('currentWorkerName');
+    const currentWorkerJob = document.getElementById('currentWorkerJob');
+    const currentSiteName = document.getElementById('currentSiteName');
+
+    const radarCard = document.getElementById('radarCard');
+    const gpsDot = document.getElementById('gpsDot');
+    const gpsStatusText = document.getElementById('gpsStatusText');
+    const distanceText = document.getElementById('distanceText');
+    const accuracyText = document.getElementById('accuracyText');
+    const breachWarning = document.getElementById('breachWarning');
+
+    const checkInArea = document.getElementById('checkInArea');
+    const checkInBtn = document.getElementById('checkInBtn');
+    const checkInSubtext = document.getElementById('checkInSubtext');
+    const checkInHint = document.getElementById('checkInHint');
+
+    const checkedInArea = document.getElementById('checkedInArea');
+    const checkOutBtn = document.getElementById('checkOutBtn');
+    const workTimer = document.getElementById('workTimer');
+
+    // Haversine Distance (client-side preview)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const rad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * rad;
+      const dLon = (lon2 - lon1) * rad;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c);
+    }
+
+    let identifiedWorkerId = null;
+
+    // 1. Load Workers & Check Saved Session or URL Param
+    async function loadWorkers() {
+      // Check URL for ?w=ID or ?worker=ID (e.g. from WhatsApp message)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlWorkerId = urlParams.get('w') || urlParams.get('worker') || urlParams.get('id');
+      const savedSessionWorkerId = localStorage.getItem('hok_worker_id');
+
+      // If user has an active session from before and NOT coming with a new ?w=ID link
+      if (savedSessionWorkerId && !urlWorkerId) {
+        selectWorkerStep.classList.add('hidden');
+        attendanceStep.classList.remove('hidden');
+      }
+
+      try {
+        const res = await fetch('/api/workers');
+        const data = await res.json();
+        if (data.success) {
+          workersList = data.workers;
+          workerSelect.innerHTML = '<option value="">-- اضغط لاختيار اسمك --</option>';
+          workersList.forEach(w => {
+            const opt = document.createElement('option');
+            opt.value = w.id;
+            const sitesDesc = (w.assigned_sites && w.assigned_sites.length > 0)
+              ? (w.assigned_sites.length > 1 ? `(${w.assigned_sites.length} مواقع مصرح بها)` : w.assigned_sites[0].name)
+              : (w.site_name || 'بدون موقع');
+            opt.textContent = `${w.name} (${w.job_title}) - ${sitesDesc}`;
+            workerSelect.appendChild(opt);
+          });
+
+          // Scenario A: Worker opened WhatsApp link with ?w=ID -> Auto-identify name & ask ONLY for password/PIN
+          if (urlWorkerId) {
+            const foundWorker = workersList.find(w => w.id == urlWorkerId);
+            if (foundWorker) {
+              identifiedWorkerId = foundWorker.id;
+              personalizedWorkerName.textContent = foundWorker.name;
+              personalizedWorkerJob.textContent = `${foundWorker.job_title} • المواقع: ${foundWorker.site_names || foundWorker.site_name || 'غير محدد'}`;
+              
+              manualSelectCard.classList.add('hidden');
+              personalizedWorkerCard.classList.remove('hidden');
+              selectWorkerStep.classList.remove('hidden');
+              attendanceStep.classList.add('hidden');
+
+              // Auto focus password/PIN input
+              setTimeout(() => {
+                personalizedPinInput.focus();
+              }, 300);
+              return;
+            }
+          }
+
+          // Scenario B: Worker has saved session in browser
+          if (savedSessionWorkerId) {
+            loginWorker(savedSessionWorkerId);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load workers:', err);
+      }
+    }
+
+    // Personalized card login action
+    personalizedLoginBtn.addEventListener('click', () => {
+      if (!identifiedWorkerId) return;
+      const pin = personalizedPinInput.value.trim();
+      if (!pin) {
+        alert('من فضلك أدخل كلمة المرور / كود الدخول الخاص بك');
+        personalizedPinInput.focus();
+        return;
+      }
+      loginWorker(identifiedWorkerId, pin);
+    });
+
+    personalizedPinInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        personalizedLoginBtn.click();
+      }
+    });
+
+    switchFromPersonalizedBtn.addEventListener('click', () => {
+      identifiedWorkerId = null;
+      personalizedWorkerCard.classList.add('hidden');
+      manualSelectCard.classList.remove('hidden');
+      workerSelect.value = '';
+      pinBox.classList.add('hidden');
+    });
+
+    workerSelect.addEventListener('change', () => {
+      if (workerSelect.value) {
+        pinBox.classList.remove('hidden');
+      } else {
+        pinBox.classList.add('hidden');
+      }
+    });
+
+    confirmWorkerBtn.addEventListener('click', () => {
+      const id = workerSelect.value;
+      if (!id) {
+        alert('من فضلك اختر اسمك أولاً');
+        return;
+      }
+      loginWorker(id, workerPin.value || '1234');
+    });
+
+    switchWorkerBtn.addEventListener('click', () => {
+      if (confirm('هل تريد تبديل العامل والخروج من الحساب الحالي؟')) {
+        localStorage.removeItem('hok_worker_id');
+        clearInterval(timerInterval);
+        clearInterval(pingInterval);
+        // Clean URL params if any
+        window.location.href = window.location.pathname;
+      }
+    });
+
+    // Render Assigned Sites for the Worker
+    function renderAssignedSitesList() {
+      const container = document.getElementById('assignedSitesContainer');
+      const countBadge = document.getElementById('assignedSitesCountBadge');
+      if (!container) return;
+
+      const sites = (currentWorker && currentWorker.assigned_sites) ? currentWorker.assigned_sites : [];
+      if (countBadge) {
+        countBadge.textContent = `${sites.length} مواقع`;
+      }
+
+      if (sites.length === 0) {
+        container.innerHTML = `
+          <div class="p-3 bg-rose-950/40 border border-rose-500/30 rounded-xl text-center text-xs text-rose-300">
+            ⚠️ لم يتم تخصيص أي موقع لك بعد. يرجى مراجعة إدارة شركة هوك.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      sites.forEach((s, idx) => {
+        const div = document.createElement('div');
+        div.id = `siteCard-${s.id}`;
+        div.className = 'p-3 rounded-xl border bg-slate-900/90 border-slate-700/80 transition-all flex items-center justify-between gap-2.5';
+        div.innerHTML = `
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm font-bold flex-shrink-0">
+              🏢
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-black bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">${idx + 1}</span>
+                <h5 class="text-xs font-bold text-white truncate">${s.name}</h5>
+              </div>
+              <p class="text-[10px] text-slate-400 truncate mt-0.5">${s.address || 'موقع إنشائي معتمد'}</p>
+            </div>
+          </div>
+          <div class="text-left flex-shrink-0">
+            <span id="siteDistBadge-${s.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 inline-block">
+              نطاق: ${s.radius}م
+            </span>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // 2. Login Worker & Set Screen
+    async function loginWorker(workerId, pin = null) {
+      try {
+        const res = await fetch('/api/worker/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ worker_id: workerId, pin })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'حدث خطأ في تسجيل الدخول');
+          selectWorkerStep.classList.remove('hidden');
+          attendanceStep.classList.add('hidden');
+          return;
+        }
+
+        currentWorker = data.worker;
+        activeAttendance = data.activeAttendance;
+        localStorage.setItem('hok_worker_id', currentWorker.id);
+
+        if (data.serverTime) {
+          serverClockOffsetMs = new Date(data.serverTime).getTime() - Date.now();
+        }
+
+        // Update UI
+        currentWorkerName.textContent = currentWorker.name;
+        currentWorkerJob.textContent = currentWorker.job_title;
+        currentSiteName.textContent = (currentWorker.assigned_sites && currentWorker.assigned_sites.length > 1)
+          ? `${currentWorker.assigned_sites.length} مواقع مصرح بها`
+          : (currentWorker.site_name || 'غير محدد');
+
+        renderAssignedSitesList();
+
+        selectWorkerStep.classList.add('hidden');
+        attendanceStep.classList.remove('hidden');
+        switchWorkerBtn.classList.remove('hidden');
+
+        // Check Cairo local time for 11:00 PM auto-close
+        const cairoStr = new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' });
+        const cairoHour = new Date(cairoStr).getHours();
+        const isPast11Pm = cairoHour >= 23;
+
+        const isExceeded10Hours = data.todayAttendance && (
+          (data.todayAttendance.accumulated_seconds >= MAX_WORK_SECONDS) ||
+          (data.todayAttendance.net_hours && data.todayAttendance.net_hours >= 10)
+        );
+
+        if (!activeAttendance && (isExceeded10Hours || isPast11Pm)) {
+          const hours = isExceeded10Hours ? 10 : (data.todayAttendance ? data.todayAttendance.net_hours : 0);
+          showDayCompletedUI(hours, isPast11Pm ? '11pm' : '10hours');
+        } else if (activeAttendance && activeAttendance.status === 'active') {
+          if (activeAttendance.requires_recheckin === 1) {
+            // Worker was flagged out of zone and must confirm re-entry
+            showCheckInUI(true);
+          } else {
+            // Worker is active and inside site - resume seamless working timer
+            showCheckedInUI(false);
+          }
+        } else if (!activeAttendance && data.todayAttendance && data.todayAttendance.status === 'completed') {
+          // Worker signed out earlier today but can resume their day's cumulative timer!
+          showResumeDayUI(data.todayAttendance);
+        } else {
+          // Fresh first check-in of the calendar day
+          showCheckInUI(false);
+        }
+
+        // Start GPS tracking
+        startGpsTracking();
+
+        // Start Periodic Heartbeat Ping (Every 25 seconds)
+        startPeriodicPing();
+
+      } catch (err) {
+        alert('تعذر الاتصال بالسيرفر. تأكد من اتصال الإنترنت.');
+      }
+    }
+
+    // 3. Multi-tier Robust GPS Geolocation Tracking
+    let gpsWatchId = null;
+    let isHighAccuracyActive = true;
+
+    function showGpsHelp() {
+      document.getElementById('gpsHelpModal').classList.remove('hidden');
+    }
+
+    function hideGpsHelp() {
+      document.getElementById('gpsHelpModal').classList.add('hidden');
+    }
+
+    function checkSecureContext() {
+      // Check if browser blocked geolocation because of insecure HTTP
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (!window.isSecureContext && !isLocal) {
+        document.getElementById('httpInsecureWarning').classList.remove('hidden');
+        gpsStatusText.textContent = '❌ المتصفح يمنع الـ GPS على روابط http (راجع التنبيه بالأعلى)';
+        gpsStatusText.className = 'text-xs font-bold text-rose-400';
+        accuracyText.textContent = 'مطلوب رابط مشفر HTTPS';
+        return false;
+      }
+      return true;
+    }
+
+    function restartGps() {
+      if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+      }
+      gpsDot.className = 'w-3 h-3 rounded-full bg-amber-500 animate-ping';
+      gpsStatusText.textContent = 'جاري البحث عن موقعك عبر الـ GPS...';
+      gpsStatusText.className = 'text-xs font-bold text-amber-400';
+      accuracyText.textContent = 'جاري الاتصال بالأقمار الصناعية والشبكة...';
+      startGpsTracking();
+    }
+
+    function startGpsTracking() {
+      if (!navigator.geolocation) {
+        alert('متصفحك لا يدعم نظام تحديد المواقع GPS!');
+        return;
+      }
+
+      checkSecureContext();
+
+      // Step 1: Quick Coarse Fix (Gets location from WiFi / Cell Towers in 1 second)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          onGpsSuccess(pos);
+          // Step 2: Now start continuous High-Accuracy GPS
+          startHighAccuracyWatch();
+        },
+        (err) => {
+          console.warn('Initial coarse GPS error:', err);
+          // If coarse fails, immediately try high accuracy watch
+          startHighAccuracyWatch();
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    }
+
+    function startHighAccuracyWatch() {
+      if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+      }
+
+      const options = {
+        enableHighAccuracy: isHighAccuracyActive,
+        timeout: 25000,
+        maximumAge: 5000
+      };
+
+      gpsWatchId = navigator.geolocation.watchPosition(
+        onGpsSuccess,
+        (err) => {
+          // If high accuracy times out or is unavailable, fallback to balanced accuracy
+          if (isHighAccuracyActive && (err.code === 2 || err.code === 3)) {
+            console.log('Falling back to balanced accuracy GPS...');
+            isHighAccuracyActive = false;
+            startHighAccuracyWatch();
+            return;
+          }
+          onGpsError(err);
+        },
+        options
+      );
+    }
+
+    function onGpsSuccess(pos) {
+      currentLat = pos.coords.latitude;
+      currentLng = pos.coords.longitude;
+      currentAccuracy = Math.round(pos.coords.accuracy);
+
+      accuracyText.textContent = `دقة الـ GPS: ± ${currentAccuracy} متر`;
+
+      const sites = (currentWorker && currentWorker.assigned_sites) ? currentWorker.assigned_sites : [];
+
+      if (!currentWorker || sites.length === 0) {
+        gpsStatusText.textContent = 'تحذير: لم يتم تخصيص أي موقع إنشائي لك بعد!';
+        gpsStatusText.className = 'text-xs font-bold text-rose-400';
+        return;
+      }
+
+      // Check distance to all assigned sites
+      let insideSite = null;
+      let nearestSite = null;
+      let minDistance = Infinity;
+
+      sites.forEach(s => {
+        const dist = calculateDistance(currentLat, currentLng, s.lat, s.lng);
+        const isSiteInside = dist <= (s.radius || 150);
+
+        // Update badge for this specific site
+        const card = document.getElementById(`siteCard-${s.id}`);
+        const badge = document.getElementById(`siteDistBadge-${s.id}`);
+        if (badge) {
+          if (isSiteInside) {
+            badge.className = 'text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 shadow-md inline-block animate-pulse';
+            badge.innerHTML = `🟢 متواجد هنا (${dist}م)`;
+            if (card) {
+              card.className = 'p-3 rounded-xl border-2 bg-emerald-950/40 border-emerald-500/80 shadow-lg shadow-emerald-500/10 transition-all flex items-center justify-between gap-2.5';
+            }
+          } else {
+            const distLabel = dist < 1000 ? `${dist} متر` : `${(dist / 1000).toFixed(1)} كم`;
+            badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 inline-block';
+            badge.innerHTML = `المسافة: ${distLabel}`;
+            if (card) {
+              card.className = 'p-3 rounded-xl border bg-slate-900/90 border-slate-700/80 transition-all flex items-center justify-between gap-2.5';
+            }
+          }
+        }
+
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearestSite = { ...s, distance: dist };
+        }
+        if (isSiteInside && !insideSite) {
+          insideSite = { ...s, distance: dist };
+        }
+      });
+
+      isInsideZone = !!insideSite;
+      currentDistance = insideSite ? insideSite.distance : minDistance;
+
+      if (isInsideZone) {
+        currentSiteName.textContent = insideSite.name;
+        gpsDot.className = 'w-3 h-3 rounded-full bg-emerald-500';
+        gpsStatusText.className = 'text-xs font-bold text-emerald-400';
+        gpsStatusText.textContent = `🟢 أنت الآن داخل موقع: ${insideSite.name}`;
+        distanceText.textContent = `المسافة لمركز الموقع: ${insideSite.distance} متر (المسموح: ${insideSite.radius}م)`;
+        radarCard.className = 'bg-emerald-950/30 border border-emerald-500/40 rounded-2xl p-4 text-center space-y-3';
+        breachWarning.classList.add('hidden');
+
+        if (isDayPermanentlyClosed) return;
+
+        // Check Attendance State:
+        const isRecheckin = activeAttendance && (activeAttendance.requires_recheckin === 1);
+        if (activeAttendance && activeAttendance.status === 'active' && !isRecheckin) {
+          // Worker is inside site and active! Resume screen seamlessly without asking to check in
+          showCheckedInUI();
+        } else {
+          // Worker either hasn't checked in yet, OR was out of zone and needs to confirm re-entry!
+          showCheckInUI(isRecheckin);
+
+          checkInBtn.disabled = false;
+          checkInBtn.className = 'w-56 h-56 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 active:scale-95 text-slate-950 border-4 border-emerald-300 flex flex-col items-center justify-center gap-2 text-center p-4 transition-all duration-300 select-none cursor-pointer shadow-2xl pulse-ring';
+
+          if (isRecheckin) {
+            checkInSubtext.textContent = 'أنت بالموقع - اضغط لتأكيد العودة!';
+            checkInSubtext.className = 'text-xs font-black text-slate-900 bg-amber-300 px-3 py-1 rounded-full';
+            checkInHint.textContent = `✅ أنت داخل نطاق (${insideSite.name}) الآن، اضغط لتأكيد استئناف العمل واحتساب الوقت.`;
+            checkInHint.className = 'text-xs text-center text-emerald-400 font-bold max-w-xs';
+          } else {
+            checkInSubtext.textContent = `أنت في (${insideSite.name}) - اضغط الآن!`;
+            checkInSubtext.className = 'text-xs font-black text-slate-900 bg-white/70 px-3 py-1 rounded-full';
+            checkInHint.textContent = `✅ أنت داخل موقع (${insideSite.name})، اضغط لتسجيل الحضور.`;
+            checkInHint.className = 'text-xs text-center text-emerald-400 font-bold max-w-xs';
+          }
+        }
+      } else {
+        // Worker is OUT OF ZONE for all allowed sites
+        const target = nearestSite || { name: 'الموقع', radius: 150 };
+        const diff = minDistance - (target.radius || 150);
+        currentSiteName.textContent = target.name;
+        gpsDot.className = 'w-3 h-3 rounded-full bg-red-500';
+        gpsStatusText.className = 'text-xs font-bold text-rose-400';
+        gpsStatusText.textContent = `🔴 أنت خارج جميع المواقع المسموحة لك`;
+        distanceText.textContent = `أقرب موقع لك: ${target.name} (يبعد ${minDistance} متر)`;
+        radarCard.className = 'bg-rose-950/30 border border-rose-500/40 rounded-2xl p-4 text-center space-y-3';
+
+        // If worker had an active session, mark as requiring recheckin and show breach alert!
+        if (activeAttendance && activeAttendance.status === 'active') {
+          activeAttendance.requires_recheckin = 1;
+          breachWarning.classList.remove('hidden');
+          playAudioTone('alert');
+          showCheckInUI(true);
+        }
+
+        checkInBtn.disabled = true;
+        checkInBtn.className = 'w-56 h-56 rounded-full bg-slate-800 text-slate-500 border-4 border-slate-700 flex flex-col items-center justify-center gap-2 text-center p-4 transition-all duration-300 select-none cursor-not-allowed opacity-80';
+        checkInSubtext.textContent = 'أنت خارج نطاق المواقع!';
+        checkInSubtext.className = 'text-xs font-bold text-rose-400';
+        checkInHint.textContent = `❌ لا يمكن تسجيل الحضور، يرجى التواجد داخل أحد المواقع المسموحة أعلاه (أقربها ${target.name} بمسافة ${diff} متر إضافية).`;
+        checkInHint.className = 'text-xs text-center text-rose-400 font-bold max-w-xs';
+      }
+    }
+
+    function onGpsError(err) {
+      console.warn('GPS Error Details:', err);
+      gpsDot.className = 'w-3 h-3 rounded-full bg-rose-500';
+
+      if (err.code === 1) { // PERMISSION_DENIED
+        gpsStatusText.textContent = '❌ تم حظر إذن الموقع! اضغط على علامة القفل 🔒 بجانب الرابط وفعل إذن الموقع';
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        gpsStatusText.textContent = '❌ تعذر استقبال إشارة الـ GPS. تأكد من تفعيل "دقة الموقع العالية" واقترب من مكان مكشوف';
+      } else if (err.code === 3) { // TIMEOUT
+        gpsStatusText.textContent = '⏳ استغرق البحث وقتاً طويلاً. اضغط على زر (إعادة محاولة قراءة الموقع)';
+      } else {
+        gpsStatusText.textContent = '❌ تعذر تحديد الموقع: ' + (err.message || 'خطأ غير معروف');
+      }
+
+      gpsStatusText.className = 'text-xs font-bold text-rose-400';
+      accuracyText.textContent = 'اضغط (مساعدة الـ GPS) بالأسفل لمعرفة خطوات الحل';
+    }
+
+    // 4. Check In Action
+    checkInBtn.addEventListener('click', async () => {
+      if (!currentWorker || !currentLat || !currentLng) {
+        alert('جاري انتظار قراءة الموقع... انتظر ثوانٍ واضغط مجدداً');
+        return;
+      }
+
+      checkInBtn.disabled = true;
+      checkInSubtext.textContent = 'جاري التأكيد...';
+
+      try {
+        const res = await fetch('/api/attendance/check-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_id: currentWorker.id,
+            lat: currentLat,
+            lng: currentLng
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          playAudioTone('success');
+          alert(`✅ ${data.message}`);
+          activeAttendance = data.attendance || {
+            id: data.attendanceId,
+            status: 'active',
+            check_in_time: new Date().toISOString(),
+            last_entry_time: new Date().toISOString(),
+            accumulated_seconds: 0,
+            requires_recheckin: 0
+          };
+          if (data.serverTime) {
+            serverClockOffsetMs = new Date(data.serverTime).getTime() - Date.now();
+          }
+          const isFirstCheckin = data.isFirstCheckinOfDay || !data.isRecheckin;
+          showCheckedInUI(isFirstCheckin);
+        } else {
+          playAudioTone('alert');
+          alert(`❌ ${data.error}`);
+          checkInBtn.disabled = false;
+          checkInSubtext.textContent = 'حاول ثانية';
+        }
+      } catch (err) {
+        alert('تعذر الاتصال بالسيرفر');
+        checkInBtn.disabled = false;
+      }
+    });
+
+    // 5. Check Out Action
+    checkOutBtn.addEventListener('click', async () => {
+      if (!confirm('هل تريد تأكيد تسجيل الانصراف وإنهاء يوم العمل؟')) return;
+
+      try {
+        const res = await fetch('/api/attendance/check-out', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_id: currentWorker.id,
+            lat: currentLat,
+            lng: currentLng
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          playAudioTone('success');
+          alert(`🏁 تم تسجيل الانصراف بنجاح!\nإجمالي ساعات العمل المعتمدة حتى الآن: ${data.netHours} ساعة.\nيمكنك استئناف العمل لاحقاً خلال اليوم إذا عدت للموقع.`);
+          activeAttendance = null;
+          const cairoHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' })).getHours();
+          if (data.netHours >= 10 || cairoHour >= 23) {
+            showDayCompletedUI(data.netHours, cairoHour >= 23 ? '11pm' : '10hours');
+          } else {
+            showResumeDayUI({ accumulated_seconds: Math.round(data.netHours * 3600), net_hours: data.netHours });
+          }
+        } else {
+          alert(`❌ ${data.error}`);
+        }
+      } catch (err) {
+        alert('تعذر الاتصال بالسيرفر');
+      }
+    });
+
+    // 6. UI Toggles & 10-Hour Auto Checkout
+    function showCheckInUI(isRecheckin = false) {
+      checkInArea.classList.remove('hidden');
+      checkedInArea.classList.add('hidden');
+      clearInterval(timerInterval);
+
+      if (isRecheckin) {
+        checkInBtn.disabled = false;
+        checkInBtn.className = 'w-56 h-56 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 active:scale-95 text-slate-950 border-4 border-emerald-300 flex flex-col items-center justify-center gap-2 text-center p-4 transition-all duration-300 select-none cursor-pointer shadow-2xl pulse-ring';
+        checkInBtn.innerHTML = `
+          <span class="text-5xl">📍</span>
+          <span class="text-xl font-black leading-tight">تأكيد الدخول<br>مجدداً للموقع</span>
+          <span id="checkInSubtext" class="text-[11px] font-semibold text-slate-900 bg-amber-300 px-3 py-1 rounded-full">أنت بالموقع - اضغط للاستئناف</span>
+        `;
+        checkInHint.textContent = '⚠️ كنت خارج نطاق الموقع، يرجى الضغط لتأكيد عودتك واستكمال عداد العمل.';
+        checkInHint.className = 'text-xs text-center text-amber-400 font-bold max-w-xs';
+      } else {
+        checkInBtn.innerHTML = `
+          <span class="text-5xl">📍</span>
+          <span class="text-xl font-black leading-tight">تسجيل<br>الحضور</span>
+          <span id="checkInSubtext" class="text-[11px] font-semibold text-slate-300">يجب التواجد بالموقع</span>
+        `;
+        checkInHint.textContent = 'يجب أن تكون داخل الدائرة الجغرافية للموقع لتسجيل الحضور';
+        checkInHint.className = 'text-xs text-center text-slate-400 max-w-xs';
+      }
+    }
+
+    function showCheckedInUI(resetToZero = false) {
+      checkInArea.classList.add('hidden');
+      checkedInArea.classList.remove('hidden');
+      breachWarning.classList.add('hidden');
+
+      // Start Work Timer (strictly counting from 00:00:00 on first daily check-in)
+      startWorkTimer(resetToZero);
+    }
+
+    function showDayCompletedUI(hours = 10, reason = '10hours') {
+      isDayPermanentlyClosed = true;
+      clearInterval(timerInterval);
+      checkInArea.classList.remove('hidden');
+      checkedInArea.classList.add('hidden');
+      breachWarning.classList.add('hidden');
+
+      const is11Pm = reason === '11pm' || reason === '11pm_daily_close';
+      const badgeText = is11Pm ? 'إغلاق 11:00 م' : `${hours} س معتمدة`;
+      const titleText = is11Pm ? 'نهاية<br>اليوم' : 'تم إغلاق<br>اليوم';
+      const hintText = is11Pm 
+        ? `🌙 تم إغلاق يوم العمل لك تلقائياً عند الساعة 11:00 مساءً بإجمالي (${hours}) ساعة عمل معتمدة. نتمنى لك وقتاً ممتعاً!`
+        : `🎉 تم إكمال الحد الأقصى لساعات العمل اليوم (10 ساعات معتمدة) وتم إغلاق اليوم تلقائياً. شكراً لجهودك!`;
+
+      checkInBtn.disabled = true;
+      checkInBtn.className = 'w-56 h-56 rounded-full bg-slate-800 text-slate-400 border-4 border-emerald-500/50 flex flex-col items-center justify-center gap-2 text-center p-4 select-none cursor-default shadow-xl';
+      checkInBtn.innerHTML = `
+        <span class="text-5xl">${is11Pm ? '🌙' : '🎉'}</span>
+        <span class="text-xl font-black leading-tight text-emerald-400">${titleText}</span>
+        <span class="text-xs font-bold text-slate-300 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30">${badgeText}</span>
+      `;
+      checkInHint.textContent = hintText;
+      checkInHint.className = 'text-xs text-center text-emerald-300 font-bold max-w-xs';
+    }
+
+    function showResumeDayUI(todayAtt) {
+      isDayPermanentlyClosed = false;
+      clearInterval(timerInterval);
+      checkInArea.classList.remove('hidden');
+      checkedInArea.classList.add('hidden');
+      breachWarning.classList.add('hidden');
+
+      const workedSecs = todayAtt.accumulated_seconds || 0;
+      const hours = Math.floor(workedSecs / 3600);
+      const mins = Math.floor((workedSecs % 3600) / 60);
+
+      checkInBtn.disabled = false;
+      checkInBtn.className = 'w-56 h-56 rounded-full bg-gradient-to-tr from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-slate-950 border-4 border-amber-300 flex flex-col items-center justify-center gap-2 text-center p-4 transition-all duration-300 select-none cursor-pointer shadow-2xl pulse-ring';
+      checkInBtn.innerHTML = `
+        <span class="text-4xl">🔄</span>
+        <span class="text-lg font-black leading-tight">استئناف<br>يوم العمل</span>
+        <span id="checkInSubtext" class="text-[10px] font-black text-slate-900 bg-white/80 px-2.5 py-0.5 rounded-full">سابقاً: ${hours}س و ${mins}د</span>
+      `;
+      checkInHint.textContent = `💡 قمت بالانصراف سابقاً اليوم بعد (${hours}س و ${mins}د). عند تأكيد الدخول إلى الموقع سيتم استكمال العداد التراكمي لليوم.`;
+      checkInHint.className = 'text-xs text-center text-amber-300 font-bold max-w-xs';
+    }
+
+    function handleAutoCheckout(hours = 10, reason = '10hours') {
+      clearInterval(timerInterval);
+      clearInterval(pingInterval);
+      playAudioTone('success');
+      const is11Pm = reason === '11pm' || reason === '11pm_daily_close';
+      if (is11Pm) {
+        alert(`🌙 تنبيه من نظام شركة هوك:\nحان موعد نهاية اليوم (الساعة 11:00 مساءً)، وتم إغلاق يوم العمل لك تلقائياً لسهوك عن تسجيل الانصراف.\nإجمالي الساعات المسجلة: ${hours} ساعة.\nنتمنى لك وقتاً سعيداً!`);
+      } else {
+        alert(`🏁 تنبيه من نظام شركة هوك:\nاستكملت 10 ساعات عمل اليوم، وتم تسجيل انصرافك تلقائياً وإغلاق اليوم.\nإجمالي الساعات المسجلة: ${hours} ساعة.\nشكراً لجهودك اليوم!`);
+      }
+      activeAttendance = null;
+      showDayCompletedUI(hours, reason);
+    }
+
+    function startWorkTimer(resetToZero = false) {
+      clearInterval(timerInterval);
+      if (!activeAttendance) return;
+
+      if (resetToZero) {
+        // STRICT COUNT FROM ZERO (00:00:00) on first check-in of the day
+        activeAttendance.accumulated_seconds = 0;
+        localBaseAccumulatedSeconds = 0;
+        localSessionStartTime = Date.now();
+        workTimer.textContent = '00:00:00';
+      } else {
+        // Resume from previous cumulative seconds (whether out of zone or after prior checkout)
+        localBaseAccumulatedSeconds = activeAttendance.accumulated_seconds || 0;
+        if (activeAttendance.last_entry_time && activeAttendance.requires_recheckin !== 1) {
+          const serverEntryMs = new Date(activeAttendance.last_entry_time).getTime();
+          const currentServerMs = Date.now() + serverClockOffsetMs;
+          const elapsed = Math.max(0, Math.floor((currentServerMs - serverEntryMs) / 1000));
+          localSessionStartTime = Date.now() - (elapsed * 1000);
+        } else {
+          localSessionStartTime = Date.now();
+        }
+      }
+
+      function tick() {
+        if (!activeAttendance) return;
+
+        let totalSecs = localBaseAccumulatedSeconds;
+        if (activeAttendance.requires_recheckin !== 1 && localSessionStartTime) {
+          const currentElapsed = Math.max(0, Math.floor((Date.now() - localSessionStartTime) / 1000));
+          totalSecs += currentElapsed;
+        }
+
+        // Automatic 10-Hour Maximum Limit Auto-Checkout
+        if (totalSecs >= MAX_WORK_SECONDS) {
+          totalSecs = MAX_WORK_SECONDS;
+          workTimer.textContent = '10:00:00';
+          handleAutoCheckout(10, '10hours');
+          return;
+        }
+
+        const hours = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
+        const secs = Math.floor(totalSecs % 60).toString().padStart(2, '0');
+        workTimer.textContent = `${hours}:${mins}:${secs}`;
+      }
+
+      tick();
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    // 7. Periodic Ping
+    function startPeriodicPing() {
+      clearInterval(pingInterval);
+      pingInterval = setInterval(async () => {
+        if (!currentWorker || currentLat == null || currentLng == null) return;
+
+        try {
+          const res = await fetch('/api/attendance/ping', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              worker_id: currentWorker.id,
+              lat: currentLat,
+              lng: currentLng,
+              accuracy: currentAccuracy
+            })
+          });
+          const data = await res.json();
+
+          // Check if server auto-closed attendance (due to 10 hours limit or 11:00 PM)
+          if (data.autoCheckedOut) {
+            handleAutoCheckout(data.netHours || 10, data.reason || '10hours');
+            return;
+          }
+
+          if (data.success && activeAttendance) {
+            if (data.serverTime) {
+              serverClockOffsetMs = new Date(data.serverTime).getTime() - Date.now();
+            }
+            activeAttendance.requires_recheckin = data.requiresRecheckin ? 1 : 0;
+            if (data.accumulatedSeconds != null) activeAttendance.accumulated_seconds = data.accumulatedSeconds;
+            if (data.lastEntryTime) activeAttendance.last_entry_time = data.lastEntryTime;
+
+            if (!data.isInside) {
+              breachWarning.classList.remove('hidden');
+              showCheckInUI(true);
+            } else {
+              breachWarning.classList.add('hidden');
+              if (data.requiresRecheckin) {
+                showCheckInUI(true);
+              } else {
+                showCheckedInUI(false);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Ping failed:', e);
+        }
+      }, 25000); // every 25 seconds
+    }
+
+    // Start
+    loadWorkers();
+  </script>
+</body>
+</html>
